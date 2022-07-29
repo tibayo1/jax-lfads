@@ -288,7 +288,7 @@ def lfads_params(key, lfads_hps):
                                      lfads_hps['ar_mean'],
                                      lfads_hps['ar_autocorrelation_tau'],
                                      lfads_hps['ar_noise_variance'])
-  gen_params = gru_params(next(skeys), gen_dim, ii_dim)
+  gen_params = gen_rnn_params(next(skeys), gen_dim, ii_dim)
   factors_params = linear_params(next(skeys), factors_dim, gen_dim)
   lograte_params = affine_params(next(skeys), data_dim, factors_dim)
 
@@ -353,7 +353,7 @@ def lfads_decode_one_step(params, lfads_hps, key, keep_rate, c, f, g, xenc):
   ii_mean, ii_logvar = np.split(cout, 2, axis=0) # inferred input params
   ii = dists.diag_gaussian_sample(keys[0], ii_mean,
                                   ii_logvar, lfads_hps['var_min'])
-  g = gru(params['gen'], g, ii)
+  g = gen(params['gen'], g, ii)
   g = dropout(g, keys[1], keep_rate)
   f = normed_linear(params['factors'], g)
   lograte = affine(params['logrates'], f)
