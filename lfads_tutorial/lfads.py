@@ -424,7 +424,8 @@ def lfads_decode(params, lfads_hps, key, ic_mean, ic_logvar, xenc_t, keep_rate, 
   keys_t = random.split(next(skeys), T)
   
   state0 = (c0, g0, f0)
-  decoder = partial(lfads_decode_one_step_scan, *(params, lfads_hps, keep_rate, gen=gen))
+  decoder = partial(lfads_decode_one_step_scan, *(params, lfads_hps, keep_rate),
+                    **{"gen": gen})
   _, state_and_returns_t = lax.scan(decoder, state0, (keys_t, xenc_t))
   return state_and_returns_t
 
@@ -466,10 +467,10 @@ lfads_jit = jit(lfads, static_argnums=(1,))
 # Batching accomplished by vectorized mapping.
 # We simultaneously map over random keys for forward-pass randomness
 # and inputs for batching.
-batch_lfads = vmap(lfads, in_axes=(None, None, 0, 0, None))
+batch_lfads = vmap(lfads, in_axes=(None, None, 0, 0, None, None))
 
 
-def lfads_losses(params, lfads_hps, key, x_bxt, kl_scale, keep_rate):
+def lfads_losses(params, lfads_hps, key, x_bxt, kl_scale, keep_rate, gen=gru):
   """Compute the training loss of the LFADS autoencoder
 
   Arguments:
@@ -487,7 +488,7 @@ def lfads_losses(params, lfads_hps, key, x_bxt, kl_scale, keep_rate):
   B = lfads_hps['batch_size']
   key, skeys = utils.keygen(key, 2)
   keys_b = random.split(next(skeys), B)
-  lfads = batch_lfads(params, lfads_hps, keys_b, x_bxt, keep_rate)
+  lfads = batch_lfads(params, lfads_hps, keys_b, x_bxt, keep_rate, gen)
 
   # Sum over time and state dims, average over batch.
   # KL - g0
@@ -525,7 +526,7 @@ def lfads_losses(params, lfads_hps, key, x_bxt, kl_scale, keep_rate):
   return all_losses
 
 
-def lfads_training_loss(params, lfads_hps, key, x_bxt, kl_scale, keep_rate):
+def lfads_training_loss(params, lfads_hps, key, x_bxt, kl_scale, keep_rate, gen=gru):
   """Pull out the total loss for training.
 
   Arguments:
@@ -539,11 +540,11 @@ def lfads_training_loss(params, lfads_hps, key, x_bxt, kl_scale, keep_rate):
   Returns:
     return the total loss for optimization
   """
-  losses = lfads_losses(params, lfads_hps, key, x_bxt, kl_scale, keep_rate)
+  losses = lfads_losses(params, lfads_hps, key, x_bxt, kl_scale, keep_rate, gen=gen)
   return losses['total']
 
 
-def posterior_sample_and_average(params, lfads_hps, key, x_txd):
+def posterior_sample_and_average(params, lfads_hps, key, x_txd, gen=gru):
   """Get the denoised lfad inferred values by posterior sample and average.
 
   Arguments:
@@ -559,7 +560,7 @@ def posterior_sample_and_average(params, lfads_hps, key, x_txd):
   skeys = random.split(key, batch_size)  
   x_bxtxd = np.repeat(np.expand_dims(x_txd, axis=0), batch_size, axis=0)
   keep_rate = 1.0
-  lfads_dict = batch_lfads(params, lfads_hps, skeys, x_bxtxd, keep_rate)
+  lfads_dict = batch_lfads(params, lfads_hps, skeys, x_bxtxd, keep_rate, gen)
   return utils.average_lfads_batch(lfads_dict)
 
 
@@ -572,10 +573,10 @@ def posterior_sample_and_average(params, lfads_hps, key, x_txd):
 # The static_argnums is telling JAX to ignore the lfads_hps dictionary,
 # which means you'll have to pay attention if you change the params.
 # How does one force a recompile?
-batch_lfads_jit = jit(batch_lfads, static_argnums=(1,))
-lfads_losses_jit = jit(lfads_losses, static_argnums=(1,))
-lfads_training_loss_jit = jit(lfads_training_loss, static_argnums=(1,))
-posterior_sample_and_average_jit = jit(posterior_sample_and_average, static_argnums=(1,))
+# batch_lfads_jit = jit(batch_lfads, static_argnums=(1,5))
+lfads_losses_jit = jit(lfads_losses, static_argnums=(1,6))
+lfads_training_loss_jit = jit(lfads_training_loss, static_argnums=(1,6))
+posterior_sample_and_average_jit = jit(posterior_sample_and_average, static_argnums=(1,4))
 
                   
   

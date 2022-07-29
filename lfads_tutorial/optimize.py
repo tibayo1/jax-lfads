@@ -103,7 +103,7 @@ optimize_lfads_core_jit = jit(optimize_lfads_core, static_argnums=(2,3,4,6,7))
 
 
 def optimize_lfads(key, init_params, lfads_hps, lfads_opt_hps,
-                   train_data, eval_data):
+                   train_data, eval_data, gen=lfads.gru):
   """Optimize the LFADS model and print batch based optimization data.
 
   This loop is at the cpu nonjax-numpy level.
@@ -134,12 +134,13 @@ def optimize_lfads(key, init_params, lfads_hps, lfads_opt_hps,
   opt_state = opt_init(init_params)
 
   def update_w_gc(i, opt_state, lfads_hps, lfads_opt_hps, key, x_bxt,
-                  kl_warmup):
+                  kl_warmup, gen=gen):
     """Update fun for gradients, includes gradient clipping."""
     params = get_params(opt_state)
     grads = grad(lfads.lfads_training_loss)(params, lfads_hps, key, x_bxt,
                                             kl_warmup,
-                                            lfads_opt_hps['keep_rate'])
+                                            lfads_opt_hps['keep_rate'],
+                                            gen=gen)
     clipped_grads = optimizers.clip_grads(grads, lfads_opt_hps['max_grad_norm'])
     return opt_update(i, clipped_grads, opt_state)
 
@@ -169,13 +170,13 @@ def optimize_lfads(key, init_params, lfads_hps, lfads_opt_hps,
     didxs = onp.random.randint(0, train_data.shape[0], batch_size)
     x_bxt = train_data[didxs].astype(onp.float32)
     tlosses = lfads.lfads_losses_jit(params, lfads_hps, dtkey, x_bxt,
-                                     kl_warmup, 1.0)
+                                     kl_warmup, 1.0, gen=gen)
 
     # Evaluation loss
     didxs = onp.random.randint(0, eval_data.shape[0], batch_size)
     ex_bxt = eval_data[didxs].astype(onp.float32)
     elosses = lfads.lfads_losses_jit(params, lfads_hps, dekey, ex_bxt,
-                                     kl_warmup, 1.0)
+                                     kl_warmup, 1.0, gen=gen)
     # Saving, printing.
     all_tlosses.append(tlosses)
     all_elosses.append(elosses)
