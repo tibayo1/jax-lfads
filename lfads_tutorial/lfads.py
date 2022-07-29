@@ -257,7 +257,7 @@ def run_bidirectional_rnn(params, fwd_rnn, bwd_rnn, x_t):
   return full_enc, enc_ends
 
 
-def lfads_params(key, lfads_hps):
+def lfads_params(key, lfads_hps, gen_rnn_params=gru_params):
   """Instantiate random LFADS parameters.
 
   Arguments:
@@ -328,7 +328,7 @@ def lfads_encode(params, lfads_hps, key, x_t, keep_rate):
   return ic_mean, ic_logvar, xenc_t
 
 
-def lfads_decode_one_step(params, lfads_hps, key, keep_rate, c, f, g, xenc):
+def lfads_decode_one_step(params, lfads_hps, key, keep_rate, c, f, g, xenc, gen=gru):
   """Run the LFADS network from latent variables to log rates one time step.
 
   Arguments:
@@ -360,7 +360,7 @@ def lfads_decode_one_step(params, lfads_hps, key, keep_rate, c, f, g, xenc):
   return c, g, f, ii, ii_mean, ii_logvar, lograte
     
 
-def lfads_decode_one_step_scan(params, lfads_hps, keep_rate, state, key_n_xenc):
+def lfads_decode_one_step_scan(params, lfads_hps, keep_rate, state, key_n_xenc, gen=gru):
   """Run the LFADS network one step, prepare the inputs and outputs for scan.
 
   Arguments:
@@ -381,13 +381,13 @@ def lfads_decode_one_step_scan(params, lfads_hps, keep_rate, state, key_n_xenc):
   key, xenc = key_n_xenc
   c, g, f = state
   state_and_returns = lfads_decode_one_step(params, lfads_hps, key, keep_rate,
-                                            c, f, g, xenc)
+                                            c, f, g, xenc, gen=gen)
   c, g, f, ii, ii_mean, ii_logvar, lograte = state_and_returns
   state = (c, g, f)
   return state, state_and_returns
 
 
-def lfads_decode(params, lfads_hps, key, ic_mean, ic_logvar, xenc_t, keep_rate):
+def lfads_decode(params, lfads_hps, key, ic_mean, ic_logvar, xenc_t, keep_rate, gen=gru):
   """Run the LFADS network from latent variables to log rates.
 
   Arguments:
@@ -424,12 +424,12 @@ def lfads_decode(params, lfads_hps, key, ic_mean, ic_logvar, xenc_t, keep_rate):
   keys_t = random.split(next(skeys), T)
   
   state0 = (c0, g0, f0)
-  decoder = partial(lfads_decode_one_step_scan, *(params, lfads_hps, keep_rate))
+  decoder = partial(lfads_decode_one_step_scan, *(params, lfads_hps, keep_rate, gen=gen))
   _, state_and_returns_t = lax.scan(decoder, state0, (keys_t, xenc_t))
   return state_and_returns_t
 
 
-def lfads(params, lfads_hps, key, x_t, keep_rate):
+def lfads(params, lfads_hps, key, x_t, keep_rate, gen=gru):
   """Run the LFADS network from input to output.
 
   Arguments:
@@ -450,7 +450,7 @@ def lfads(params, lfads_hps, key, x_t, keep_rate):
 
   c_t, gen_t, factor_t, ii_t, ii_mean_t, ii_logvar_t, lograte_t = \
       lfads_decode(params, lfads_hps, next(skeys), ic_mean, ic_logvar,
-                   xenc_t, keep_rate)
+                   xenc_t, keep_rate, gen=gen)
   
   # As this is tutorial code, we're passing everything around.
   return {'xenc_t' : xenc_t, 'ic_mean' : ic_mean, 'ic_logvar' : ic_logvar,
