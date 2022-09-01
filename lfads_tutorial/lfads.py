@@ -512,7 +512,7 @@ def lfads_losses(params, lfads_hps, key, x_bxt, kl_scale, keep_rate, gen=gru):
   
   # Log-likelihood of data given latents.
   lograte_bxt = lfads['lograte_t']
-  log_p_xgz = np.sum(dists.poisson_log_likelihood(x_bxt, lograte_bxt)) / B
+  log_p_xgz = np.sum(dists.diag_gaussian_log_likelihood(x_bxt, mean = lograte_bxt,logvar=2)) / B
 
   # L2
   l2reg = lfads_hps['l2reg']
